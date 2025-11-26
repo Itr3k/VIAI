@@ -47,12 +47,13 @@ const AgenciesPage: React.FC<AgenciesPageProps> = ({ onImpersonate }) => {
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [email, setEmail] = useState('');
+  const [logoUrl, setLogoUrl] = useState('');
   const [plan, setPlan] = useState<PlanType>('free');
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    
+
     // Simulate API Call
     setTimeout(() => {
       const newAgency: Agency = {
@@ -63,7 +64,7 @@ const AgenciesPage: React.FC<AgenciesPageProps> = ({ onImpersonate }) => {
         plan,
         status: 'active',
         createdAt: new Date().toISOString(),
-        logoUrl: name.substring(0, 2).toUpperCase()
+        logoUrl: logoUrl || name.substring(0, 2).toUpperCase()
       };
       setAgencies([...agencies, newAgency]);
       setIsLoading(false);
@@ -76,6 +77,7 @@ const AgenciesPage: React.FC<AgenciesPageProps> = ({ onImpersonate }) => {
     setName('');
     setSlug('');
     setEmail('');
+    setLogoUrl('');
     setPlan('free');
   };
 
@@ -86,7 +88,7 @@ const AgenciesPage: React.FC<AgenciesPageProps> = ({ onImpersonate }) => {
           <h2 className="text-2xl font-bold text-slate-900">Agency Management</h2>
           <p className="text-slate-500 mt-1">Super Admin Console: Monitor and manage tenants.</p>
         </div>
-        <button 
+        <button
           onClick={() => setIsModalOpen(true)}
           className="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm flex items-center gap-2"
         >
@@ -112,9 +114,13 @@ const AgenciesPage: React.FC<AgenciesPageProps> = ({ onImpersonate }) => {
               <tr key={agency.id} className="hover:bg-slate-50 transition-colors">
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-slate-800 text-white flex items-center justify-center text-xs font-bold">
-                      {agency.logoUrl}
-                    </div>
+                    {agency.logoUrl && agency.logoUrl.startsWith('http') ? (
+                      <img src={agency.logoUrl} alt={agency.name} className="w-8 h-8 rounded-full object-cover bg-slate-100" />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600">
+                        {agency.name.substring(0, 2).toUpperCase()}
+                      </div>
+                    )}
                     <div>
                       <p className="font-medium text-slate-900">{agency.name}</p>
                       <p className="text-slate-500 text-xs">{agency.adminEmail}</p>
@@ -123,20 +129,19 @@ const AgenciesPage: React.FC<AgenciesPageProps> = ({ onImpersonate }) => {
                 </td>
                 <td className="px-6 py-4 text-slate-600 font-mono text-xs">{agency.slug}.viai.app</td>
                 <td className="px-6 py-4">
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border capitalize ${
-                    agency.plan === 'pro' 
-                      ? 'bg-purple-50 text-purple-700 border-purple-200' 
-                      : agency.plan === 'enterprise'
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border capitalize ${agency.plan === 'pro'
+                    ? 'bg-purple-50 text-purple-700 border-purple-200'
+                    : agency.plan === 'enterprise'
                       ? 'bg-slate-800 text-white border-slate-600'
                       : 'bg-slate-100 text-slate-700 border-slate-200'
-                  }`}>
+                    }`}>
                     {agency.plan}
                   </span>
                 </td>
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-2">
-                     <span className={`w-2 h-2 rounded-full ${agency.status === 'active' ? 'bg-green-500' : 'bg-slate-300'}`}></span>
-                     <span className="capitalize text-slate-700">{agency.status}</span>
+                    <span className={`w-2 h-2 rounded-full ${agency.status === 'active' ? 'bg-green-500' : 'bg-slate-300'}`}></span>
+                    <span className="capitalize text-slate-700">{agency.status}</span>
                   </div>
                 </td>
                 <td className="px-6 py-4 text-slate-500">
@@ -144,7 +149,7 @@ const AgenciesPage: React.FC<AgenciesPageProps> = ({ onImpersonate }) => {
                 </td>
                 <td className="px-6 py-4 text-right">
                   {/* Reuse the handler if provided, otherwise generic alert */}
-                  <button 
+                  <button
                     onClick={() => onImpersonate ? onImpersonate(agency) : alert('Impersonation disabled here.')}
                     className="text-brand-600 hover:text-brand-800 font-medium text-sm transition-colors border border-brand-200 hover:border-brand-300 rounded px-3 py-1 bg-brand-50"
                   >
@@ -167,12 +172,12 @@ const AgenciesPage: React.FC<AgenciesPageProps> = ({ onImpersonate }) => {
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
-            
+
             <form onSubmit={handleCreate} className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Agency Name</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   required
                   value={name}
                   onChange={e => {
@@ -183,12 +188,12 @@ const AgenciesPage: React.FC<AgenciesPageProps> = ({ onImpersonate }) => {
                   placeholder="e.g. Acme Corp"
                 />
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">URL Slug</label>
                 <div className="flex items-center">
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     required
                     value={slug}
                     onChange={e => setSlug(e.target.value)}
@@ -200,14 +205,36 @@ const AgenciesPage: React.FC<AgenciesPageProps> = ({ onImpersonate }) => {
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Admin Email</label>
-                <input 
-                  type="email" 
+                <input
+                  type="email"
                   required
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm"
                   placeholder="admin@agency.com"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Logo URL (Optional)</label>
+                <input
+                  type="url"
+                  value={logoUrl}
+                  onChange={e => setLogoUrl(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm"
+                  placeholder="https://example.com/logo.png"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="korraEnabled"
+                  className="w-4 h-4 text-brand-600 border-slate-300 rounded focus:ring-brand-500"
+                />
+                <label htmlFor="korraEnabled" className="text-sm font-medium text-slate-700">
+                  Enable Korra AI Assistant
+                </label>
               </div>
 
               <div>
@@ -218,11 +245,10 @@ const AgenciesPage: React.FC<AgenciesPageProps> = ({ onImpersonate }) => {
                       key={p}
                       type="button"
                       onClick={() => setPlan(p)}
-                      className={`px-3 py-2 rounded-lg text-sm font-medium border capitalize ${
-                        plan === p 
-                          ? 'bg-brand-50 border-brand-500 text-brand-700 ring-1 ring-brand-500' 
-                          : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
-                      }`}
+                      className={`px-3 py-2 rounded-lg text-sm font-medium border capitalize ${plan === p
+                        ? 'bg-brand-50 border-brand-500 text-brand-700 ring-1 ring-brand-500'
+                        : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                        }`}
                     >
                       {p}
                     </button>
@@ -231,15 +257,15 @@ const AgenciesPage: React.FC<AgenciesPageProps> = ({ onImpersonate }) => {
               </div>
 
               <div className="pt-4 flex gap-3">
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   onClick={() => setIsModalOpen(false)}
                   className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors"
                 >
                   Cancel
                 </button>
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   disabled={isLoading}
                   className="flex-1 px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
                 >
