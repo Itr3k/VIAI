@@ -33,15 +33,10 @@ const MOCK_USERS: User[] = [
   }
 ];
 
-interface UsersPageProps {
-  currentUserRole?: UserRole;
-  agencyId?: string;
-}
-
-const UsersPage: React.FC<UsersPageProps> = ({ currentUserRole = 'admin', agencyId }) => {
+const UsersPage: React.FC = () => {
   const [users, setUsers] = useState<User[]>(MOCK_USERS);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
-
+  
   // Form State
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteName, setInviteName] = useState('');
@@ -55,7 +50,7 @@ const UsersPage: React.FC<UsersPageProps> = ({ currentUserRole = 'admin', agency
       email: inviteEmail,
       role: inviteRole,
       status: 'invited',
-      agencyId: agencyId || 'agency-1',
+      agencyId: 'agency-1',
       avatarUrl: inviteName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()
     };
     setUsers([...users, newUser]);
@@ -72,7 +67,7 @@ const UsersPage: React.FC<UsersPageProps> = ({ currentUserRole = 'admin', agency
           <h2 className="text-2xl font-bold text-slate-900">User Management</h2>
           <p className="text-slate-500 mt-1">Manage access and roles for your agency members.</p>
         </div>
-        <button
+        <button 
           onClick={() => setIsInviteModalOpen(true)}
           className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm flex items-center gap-2"
         >
@@ -107,34 +102,27 @@ const UsersPage: React.FC<UsersPageProps> = ({ currentUserRole = 'admin', agency
                   </div>
                 </td>
                 <td className="px-6 py-4">
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${user.role === 'admin'
-                    ? 'bg-slate-100 text-slate-800 border-slate-200'
-                    : 'bg-white text-slate-600 border-slate-200'
-                    }`}>
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${
+                    user.role === 'admin' 
+                      ? 'bg-slate-100 text-slate-800 border-slate-200' 
+                      : 'bg-white text-slate-600 border-slate-200'
+                  }`}>
                     {user.role === 'admin' ? 'Admin' : 'User'}
                   </span>
                 </td>
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-2">
-                    <span className={`w-2 h-2 rounded-full ${user.status === 'active' ? 'bg-green-500' : 'bg-amber-400'}`}></span>
-                    <span className="capitalize text-slate-700">{user.status}</span>
+                     <span className={`w-2 h-2 rounded-full ${user.status === 'active' ? 'bg-green-500' : 'bg-amber-400'}`}></span>
+                     <span className="capitalize text-slate-700">{user.status}</span>
                   </div>
                 </td>
                 <td className="px-6 py-4 text-slate-500">
                   {user.lastLogin ? new Date(user.lastLogin).toLocaleString() : 'Never'}
                 </td>
                 <td className="px-6 py-4 text-right">
-                  <div className="flex justify-end gap-3">
-                    <button className="text-slate-400 hover:text-brand-600 font-medium text-sm transition-colors" title="Edit Role">
-                      Edit
-                    </button>
-                    <button className="text-slate-400 hover:text-brand-600 font-medium text-sm transition-colors" title="Reset Password">
-                      Reset
-                    </button>
-                    <button className="text-slate-400 hover:text-red-600 font-medium text-sm transition-colors" title="Delete User">
-                      Delete
-                    </button>
-                  </div>
+                  <button className="text-slate-400 hover:text-slate-600 font-medium text-sm transition-colors">
+                    Edit
+                  </button>
                 </td>
               </tr>
             ))}
@@ -152,12 +140,12 @@ const UsersPage: React.FC<UsersPageProps> = ({ currentUserRole = 'admin', agency
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
-
+            
             <form onSubmit={handleInvite} className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
-                <input
-                  type="text"
+                <input 
+                  type="text" 
                   required
                   value={inviteName}
                   onChange={e => setInviteName(e.target.value)}
@@ -167,8 +155,8 @@ const UsersPage: React.FC<UsersPageProps> = ({ currentUserRole = 'admin', agency
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Email Address</label>
-                <input
-                  type="email"
+                <input 
+                  type="email" 
                   required
                   value={inviteEmail}
                   onChange={e => setInviteEmail(e.target.value)}
@@ -178,29 +166,26 @@ const UsersPage: React.FC<UsersPageProps> = ({ currentUserRole = 'admin', agency
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Role</label>
-                <select
+                <select 
                   value={inviteRole}
                   onChange={e => setInviteRole(e.target.value as UserRole)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm bg-white"
                 >
                   <option value="user">User (View Calls only)</option>
-                  <option value="admin">Agency Admin (Manage Users & Settings)</option>
-                  {currentUserRole === 'super_admin' && (
-                    <option value="super_admin">Super Admin (Full System Access)</option>
-                  )}
+                  <option value="admin">Admin (Manage Users & Settings)</option>
                 </select>
               </div>
 
               <div className="pt-4 flex gap-3">
-                <button
-                  type="button"
+                <button 
+                  type="button" 
                   onClick={() => setIsInviteModalOpen(false)}
                   className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors"
                 >
                   Cancel
                 </button>
-                <button
-                  type="submit"
+                <button 
+                  type="submit" 
                   className="flex-1 px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800 transition-colors shadow-sm"
                 >
                   Send Invitation

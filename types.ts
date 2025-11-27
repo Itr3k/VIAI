@@ -33,18 +33,11 @@ export interface CallData {
   audioUrl?: string; // Mocked
   elevenLabsCallId?: string;
   toolExecutions?: ToolExecution[];
-  logoUrl?: string; // For white-labeling
-  customDomain?: string; // For white-labeling
-  domainStatus?: 'pending' | 'active' | 'failed';
 }
 
 export interface AgencySettings {
   name: string;
   nangoConnected: boolean;
-  logoUrl?: string;
-  customDomain?: string;
-  domainStatus?: 'pending' | 'active' | 'failed';
-  korraEnabled?: boolean;
 }
 
 // For chart data
@@ -135,55 +128,15 @@ export interface ClientKPIs {
   missedOpportunities: number;
 }
 
-export type ViewState =
-  | 'dashboard'
-  | 'calls'
-  | 'users'
-  | 'agencies'
-  | 'integrations'
-  | 'sync'
+export type ViewState = 
+  | 'dashboard' 
+  | 'calls' 
+  | 'users' 
+  | 'agencies' 
+  | 'integrations' 
+  | 'sync' 
   | 'reporting'
   | 'portal_dashboard'
   | 'portal_calls'
   | 'portal_analytics'
-  | 'portal_settings'
-  | 'support';
-
-export interface Message {
-  id: string;
-  senderId: string;
-  senderName: string;
-  role: UserRole;
-  content: string;
-  timestamp: string;
-}
-
-export interface Ticket {
-  id: string;
-  subject: string;
-  status: 'open' | 'closed' | 'resolved';
-  priority: 'low' | 'medium' | 'high';
-  agencyId: string;
-  clientId: string;
-  clientName: string;
-  isEscalated: boolean;
-  messages: Message[];
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface SystemNotification {
-  id: string;
-  message: string;
-  type: 'info' | 'warning' | 'error';
-  active: boolean;
-  createdAt: string;
-}
-
-export interface IntegrationStatus {
-  agencyId: string;
-  agencyName: string;
-  elevenLabsStatus: 'connected' | 'disconnected' | 'error';
-  nangoStatus: 'connected' | 'disconnected' | 'error';
-  hubSpotStatus: 'connected' | 'disconnected' | 'error';
-}
+  | 'portal_settings';
