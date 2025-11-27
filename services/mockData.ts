@@ -131,8 +131,19 @@ Client: "Perfect. Proceed with the demo."`,
       tool: 'viai_email_tool',
       status: 'success',
       timestamp: new Date().toISOString(),
-      payload: { topic: 'Safety Protocols' },
-      result: 'Email sent successfully'
+      payload: {
+        topic: "I've sent your message to the appropriate staff, and someone will follow up to discuss the issues with your door installation and..."
+      },
+      result: 'Message sent to appropriate staff'
+    },
+    {
+      tool: 'viai_email_tool',
+      status: 'success',
+      timestamp: new Date().toISOString(),
+      payload: {
+        topic: "I have already sent a message to the appropriate staff with the information you provided"
+      },
+      result: 'Message sent to appropriate staff'
     }
   ]
 };

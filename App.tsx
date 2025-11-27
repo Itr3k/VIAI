@@ -1,140 +1,177 @@
-
-import React, { useState } from 'react';
-import { CallData, AgencySettings, SentimentTrend, UserRole, ViewState } from './types';
-import { MOCK_CALLS, MOCK_TRENDS, MOCK_AGENT_PERFORMANCE, MOCK_CALL_VOLUME } from './services/mockData';
-import { analyzeCallTranscript } from './services/geminiService';
-import WordCloud from './components/WordCloud';
-import SentimentChart from './components/Charts';
+import React, { useState, useEffect } from 'react';
+import { LayoutDashboard, Phone, FileText, Settings, LogOut, Plus, Users, Building, Bot, RefreshCw, Shield, MessageSquare, UserPlus, Link } from 'lucide-react';
+import { CallLog, Agency, Agent, User } from './types';
+import { runAnalysis } from './utils/gemini';
+import CallDetailPage from './components/calls/CallDetailPage';
+import KorraAssistant from './components/KorraAssistant';
 import ConnectOutlook from './components/ConnectOutlook';
 import UsersPage from './components/admin/UsersPage';
 import AgenciesPage, { MOCK_AGENCIES } from './components/admin/AgenciesPage';
+import GlobalUsersPage from './components/admin/GlobalUsersPage';
+import ElevenLabsAgentsPage from './components/admin/ElevenLabsAgentsPage';
+import AdminCallsPage from './components/admin/AdminCallsPage';
+import AdminReportingPage from './components/admin/AdminReportingPage';
+import AdminIntegrationsPage from './components/admin/AdminIntegrationsPage';
+import AdminSyncPage from './components/admin/AdminSyncPage';
 import IntegrationsPage from './components/settings/IntegrationsPage';
 import SyncPage from './components/settings/SyncPage';
 import ReportingPage from './components/reporting/ReportingPage';
-import ClientLayout from './components/layouts/ClientLayout';
+import SuperAdminPage from './components/admin/SuperAdminPage';
 import ClientDashboard from './components/portal/ClientDashboard';
 import ClientCallsPage from './components/portal/ClientCallsPage';
-import { MinutesUsageCard, ToolHealthCard, AgentPerformanceGraph, CallVolumeGraph } from './components/dashboard/DashboardWidgets';
-// Using default import for the page component
-import CallDetailPage from './components/calls/CallDetailPage';
-import SuperAdminPage from './components/admin/SuperAdminPage';
-import { useImpersonation } from './hooks/useImpersonation';
-import KorraAssistant from './components/KorraAssistant';
+import ClientReportsPage from './components/portal/ClientReportsPage';
+import ClientSettingsPage from './components/portal/ClientSettingsPage';
+import KnowledgeBasePage from './components/knowledge/KnowledgeBasePage';
+import HelpdeskPage from './components/helpdesk/HelpdeskPage';
+import NotificationCenter from './components/notifications/NotificationCenter';
+import NotificationManager from './components/notifications/NotificationManager';
+import AgencyClientsPage from './components/agency/AgencyClientsPage';
+import AgencyUsersPage from './components/agency/AgencyUsersPage';
+import AgencyDashboard from './components/agency/AgencyDashboard';
+import AgencyOnboardingPage from './components/agency/AgencyOnboardingPage';
+import SuperAdminOnboardingPage from './components/admin/SuperAdminOnboardingPage';
+import KorraSystemPage from './components/admin/KorraSystemPage';
+import { TopClientsWidget } from './components/dashboard/DashboardWidgets';
+
+// Mock Data
+const MOCK_CALLS: CallLog[] = [
+  { id: '1', clientName: 'John Doe', agentName: 'Receptionist AI', timestamp: new Date().toISOString(), duration: '2m 30s', status: 'processed', direction: 'inbound', outcome: 'answered', recordingUrl: '#', transcript: '...', analysis: { summary: 'Appointment scheduled', sentimentScore: 85, actionItems: ['Send confirmation'] } },
+  { id: '2', clientName: 'Jane Smith', agentName: 'Sales Bot', timestamp: new Date(Date.now() - 3600000).toISOString(), duration: '5m 12s', status: 'flagged', direction: 'outbound', outcome: 'answered', recordingUrl: '#', transcript: '...', analysis: { summary: 'Customer upset about pricing', sentimentScore: 40, actionItems: ['Follow up call'] } },
+  { id: '3', clientName: 'Mike Johnson', agentName: 'Support AI', timestamp: new Date(Date.now() - 7200000).toISOString(), duration: '1m 45s', status: 'processed', direction: 'inbound', outcome: 'voicemail', recordingUrl: '#', transcript: '...', analysis: { summary: 'Password reset', sentimentScore: 90, actionItems: [] } },
+];
+
+type ViewState = 'dashboard' | 'clients' | 'reports' | 'settings' | 'integrations' | 'admin-integrations' | 'sync' | 'reporting' | 'admin_users' | 'admin_agents' | 'admin_calls' | 'admin_reporting' | 'admin_integrations' | 'admin_sync' | 'onboarding' | 'agency_clients' | 'calls' | 'korra_system' | 'users' | 'notifications' | 'helpdesk' | 'agencies' | 'agency_users' | 'knowledge_base';
 
 const App: React.FC = () => {
-  const [calls, setCalls] = useState<CallData[]>(MOCK_CALLS);
-  const [selectedCall, setSelectedCall] = useState<CallData | null>(null);
-  const [settings, setSettings] = useState<AgencySettings>({ name: 'Acme Agency', nangoConnected: false });
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [view, setView] = useState<ViewState>('dashboard');
+  const [selectedCall, setSelectedCall] = useState<CallLog | null>(null);
+  const [calls, setCalls] = useState<CallLog[]>(MOCK_CALLS);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [userRole, setUserRole] = useState<'super_admin' | 'agency_admin' | 'client'>('super_admin');
+  const [impersonatedClient, setImpersonatedClient] = useState<User | null>(null);
 
-  // Mock Auth State
-  const [userRole, setUserRole] = useState<UserRole>('admin');
-
-  // Impersonation Hook
-  const { isImpersonating, impersonatedAgency, startImpersonation, stopImpersonation } = useImpersonation({
-    setSettings,
-    setUserRole
+  // Settings State
+  const [settings, setSettings] = useState({
+    theme: 'light',
+    notifications: true,
+    apiKey: '',
+    korraEnabled: true
   });
-
-  // Aggregated data for dashboard
-  const totalCalls = calls.length;
-  const avgSentiment = Math.round(calls.reduce((acc, c) => acc + (c.analysis?.sentimentScore || 0), 0) / (calls.filter(c => c.analysis).length || 1));
-
-  // Aggregate all keywords for global word cloud
-  const globalKeywords = calls
-    .flatMap(c => c.analysis?.keywords || [])
-    .reduce((acc, curr) => {
-      const existing = acc.find(k => k.text === curr.text);
-      if (existing) {
-        existing.value += curr.value;
-      } else {
-        acc.push({ ...curr });
-      }
-      return acc;
-    }, [] as { text: string; value: number }[])
-    .sort((a, b) => b.value - a.value)
-    .slice(0, 20);
 
   const handleRunAnalysis = async (callId: string) => {
     setIsAnalyzing(true);
-    const callToAnalyze = calls.find(c => c.id === callId);
-
-    if (callToAnalyze && callToAnalyze.transcript) {
-      try {
-        const analysis = await analyzeCallTranscript(callToAnalyze.transcript);
-
-        setCalls(prev => prev.map(c =>
-          c.id === callId ? { ...c, analysis, status: 'processed' } : c
-        ));
-
-        // Auto-select the updated call if we are looking at it
-        if (selectedCall?.id === callId) {
-          setSelectedCall({ ...callToAnalyze, analysis, status: 'processed' });
-        }
-
-      } catch (err) {
-        console.error("Analysis Error", err);
-        alert("Failed to analyze call. Check API Key in env.");
-      }
-    }
-    setIsAnalyzing(false);
+    // Simulate API call
+    setTimeout(() => {
+      setIsAnalyzing(false);
+      alert('Analysis re-run complete!');
+    }, 2000);
   };
 
-  const handleSendEmail = () => {
-    if (!settings.nangoConnected) {
-      alert("Please connect Outlook first via the Dashboard.");
-      return;
+  const startImpersonation = (agency: Agency) => {
+    console.log('Impersonating agency:', agency.name);
+    setUserRole('agency_admin');
+    setView('dashboard');
+  };
+
+  const startClientImpersonation = (client: User) => {
+    console.log('Impersonating client:', client.name);
+    setImpersonatedClient(client);
+    setUserRole('client');
+    setView('dashboard');
+  };
+
+  const stopImpersonation = () => {
+    if (impersonatedClient) {
+      setImpersonatedClient(null);
+      // Return to Agency Admin view if we were impersonating a client
+      // But wait, if a Super Admin impersonated a client directly (via AgencyClientsPage in Super Admin view), where should they go back to?
+      // For now, let's assume Super Admin -> Agency Admin -> Client flow, or Super Admin -> Client flow.
+      // If we were Super Admin originally, we might want to go back to Super Admin.
+      // But simplifying: if we are in 'client' role and stop, go back to 'agency_admin' if we came from there?
+      // Let's just default to 'super_admin' for safety, or 'agency_admin' if that was the previous state.
+      // Since we don't track previous state stack, let's just go to 'agency_admin' as a safe fallback for now, or 'super_admin'.
+      // Actually, let's check the current role.
+      setUserRole('agency_admin'); // Fallback to Agency Admin usually
+    } else {
+      setUserRole('super_admin');
     }
-    alert("Triggered Nango Proxy: Email draft created in Outlook Sent Items.");
+    setView('dashboard');
   };
 
   // --- CLIENT PORTAL VIEW ---
   if (userRole === 'client') {
     return (
-      <ClientLayout
-        view={view}
-        setView={setView}
-        clientName="Dr. Smith Dental"
-        onLogout={() => setUserRole('admin')} // Mock Logout
-      >
-        {/* If a call is selected, show the Detail Page (Phase 4 Template) */}
-        {selectedCall ? (
-          <CallDetailPage
-            call={selectedCall}
-            onBack={() => setSelectedCall(null)}
-            onGenerateAnalysis={handleRunAnalysis}
-            isAnalyzing={isAnalyzing}
-          />
-        ) : (
-          <>
-            {view === 'portal_dashboard' && <ClientDashboard calls={calls} onPlayCall={setSelectedCall} />}
-            {view === 'portal_calls' && <ClientCallsPage calls={calls} onPlayCall={setSelectedCall} />}
-            {view === 'portal_analytics' && (
-              <div className="flex flex-col items-center justify-center h-96 text-slate-400">
-                <svg className="w-16 h-16 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
-                <p>Advanced Analytics coming soon.</p>
-              </div>
-            )}
-            {view === 'portal_settings' && (
-              <div className="flex flex-col items-center justify-center h-96 text-slate-400">
-                <svg className="w-16 h-16 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                <p>Client Settings coming soon.</p>
-              </div>
-            )}
-          </>
+      <div className="min-h-screen bg-slate-50 flex">
+        {/* Impersonation Banner */}
+        {impersonatedClient && (
+          <div className="fixed top-0 left-0 right-0 bg-indigo-600 text-white px-4 py-2 text-sm font-medium z-50 flex justify-between items-center shadow-md">
+            <div className="flex items-center">
+              <Shield className="w-4 h-4 mr-2" />
+              Viewing as Client: {impersonatedClient.name}
+            </div>
+            <button
+              onClick={stopImpersonation}
+              className="bg-white text-indigo-600 px-3 py-1 rounded-md text-xs font-bold hover:bg-indigo-50 transition-colors"
+            >
+              Exit Client View
+            </button>
+          </div>
         )}
-      </ClientLayout>
+
+        <aside className={`w-64 bg-white border-r border-slate-200 fixed inset-y-0 z-10 overflow-y-auto ${impersonatedClient ? 'top-10' : 'top-0'}`}>
+          <div className="p-6">
+            <h1 className="text-2xl font-bold text-indigo-600 tracking-tight flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white">
+                <Building className="w-5 h-5" />
+              </div>
+              {impersonatedClient ? impersonatedClient.name : 'Acme Corp'}
+            </h1>
+            <p className="text-xs text-slate-500 mt-2 uppercase tracking-wider font-semibold">Client Portal</p>
+          </div>
+          <nav className="px-4 mt-4 space-y-1">
+            <button onClick={() => setView('dashboard')} className={`flex items-center w-full px-4 py-3 rounded-lg transition-colors ${view === 'dashboard' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'}`}>
+              <LayoutDashboard className="w-5 h-5 mr-3" /> Dashboard
+            </button>
+            <button onClick={() => setView('calls')} className={`flex items-center w-full px-4 py-3 rounded-lg transition-colors ${view === 'calls' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'}`}>
+              <Phone className="w-5 h-5 mr-3" /> My Calls
+            </button>
+            <button onClick={() => setView('reporting')} className={`flex items-center w-full px-4 py-3 rounded-lg transition-colors ${view === 'reporting' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'}`}>
+              <FileText className="w-5 h-5 mr-3" /> Reports
+            </button>
+            <button onClick={() => setView('knowledge_base')} className={`flex items-center w-full px-4 py-3 rounded-lg transition-colors ${view === 'knowledge_base' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'}`}>
+              <Bot className="w-5 h-5 mr-3" /> Knowledge Base
+            </button>
+            <button onClick={() => setView('settings')} className={`flex items-center w-full px-4 py-3 rounded-lg transition-colors ${view === 'settings' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'}`}>
+              <Settings className="w-5 h-5 mr-3" /> Settings
+            </button>
+            <button onClick={() => setView('integrations')} className={`flex items-center w-full px-4 py-3 rounded-lg transition-colors ${view === 'integrations' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'}`}>
+              <Link className="w-5 h-5 mr-3" /> Integrations
+            </button>
+          </nav>
+        </aside>
+        <main className={`ml-64 flex-1 p-8 ${impersonatedClient ? 'mt-10' : 'mt-0'}`}>
+          {view === 'dashboard' && <ClientDashboard calls={calls} onPlayCall={setSelectedCall} />}
+          {view === 'reporting' && <ClientReportsPage />}
+          {view === 'settings' && <ClientSettingsPage />}
+          {view === 'integrations' && <IntegrationsPage />}
+          {view === 'knowledge_base' && <KnowledgeBasePage />}
+          {view === 'calls' && (
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+              <h2 className="text-xl font-bold text-slate-900 mb-4">Call History</h2>
+              <p className="text-slate-500">List of calls for this client account...</p>
+            </div>
+          )}
+        </main>
+      </div>
     );
   }
 
   // --- SUPER ADMIN VIEW ---
-  // If role is super_admin AND not currently impersonating someone
-  if (userRole === 'super_admin' && !isImpersonating) {
+  if (userRole === 'super_admin') {
     return (
       <div className="min-h-screen flex bg-slate-50">
         {/* Simple Sidebar for Super Admin */}
-        <aside className="hidden md:flex w-64 bg-slate-900 text-slate-300 flex-col fixed inset-y-0 z-10">
+        <aside className="hidden md:flex w-64 bg-slate-900 text-slate-300 flex-col fixed inset-y-0 z-10 overflow-y-auto">
           <div className="p-6">
             <h1 className="text-2xl font-bold text-white tracking-tight flex items-center gap-2">
               <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-red-500 to-orange-500"></div>
@@ -142,339 +179,340 @@ const App: React.FC = () => {
             </h1>
             <p className="text-xs text-red-400 mt-2 font-mono uppercase">System Owner</p>
           </div>
-          <nav className="flex-1 px-4 mt-4">
-            <button className="flex items-center w-full px-4 py-3 rounded-lg bg-red-900/30 text-white shadow-inner mb-2">
-              <svg className="w-5 h-5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
-              Global Dashboard
+          <nav className="flex-1 px-4 mt-4 space-y-1">
+            <button
+              onClick={() => setView('dashboard')}
+              className={`flex items-center w-full px-4 py-3 rounded-lg transition-colors ${view === 'dashboard' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+            >
+              <LayoutDashboard className="w-5 h-5 mr-3" />
+              Dashboard
+            </button>
+            <button
+              onClick={() => setView('onboarding')}
+              className={`flex items-center w-full px-4 py-3 rounded-lg transition-colors ${view === 'onboarding' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+            >
+              <UserPlus className="w-5 h-5 mr-3" />
+              Onboarding
+            </button>
+            <button
+              onClick={() => setView('admin_calls')}
+              className={`flex items-center w-full px-4 py-3 rounded-lg transition-colors ${view === 'admin_calls' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+            >
+              <Phone className="w-5 h-5 mr-3" />
+              Call Logs
+            </button>
+            <button
+              onClick={() => setView('admin_reporting')}
+              className={`flex items-center w-full px-4 py-3 rounded-lg transition-colors ${view === 'admin_reporting' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+            >
+              <FileText className="w-5 h-5 mr-3" />
+              Reporting Agent
+            </button>
+            <button
+              onClick={() => setView('korra_system')}
+              className={`flex items-center w-full px-4 py-3 rounded-lg transition-colors ${view === 'korra_system' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+            >
+              <Bot className="w-5 h-5 mr-3" />
+              Korra AI
+            </button>
+
+            <div className="pt-4 pb-2 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
+              Administration
+            </div>
+
+            <button
+              onClick={() => setView('agencies')}
+              className={`flex items-center w-full px-4 py-3 rounded-lg transition-colors ${view === 'agencies' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+            >
+              <Building className="w-5 h-5 mr-3" />
+              Tenants
+            </button>
+            <button
+              onClick={() => setView('admin_users')}
+              className={`flex items-center w-full px-4 py-3 rounded-lg transition-colors ${view === 'admin_users' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+            >
+              <Users className="w-5 h-5 mr-3" />
+              Global Users
+            </button>
+            <button
+              onClick={() => setView('agency_clients')}
+              className={`flex items-center w-full px-4 py-3 rounded-lg transition-colors ${view === 'agency_clients' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+            >
+              <Users className="w-5 h-5 mr-3" />
+              Clients
+            </button>
+            <button
+              onClick={() => setView('agency_users')}
+              className={`flex items-center w-full px-4 py-3 rounded-lg transition-colors ${view === 'agency_users' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+            >
+              <Shield className="w-5 h-5 mr-3" />
+              Team
+            </button>
+            <button
+              onClick={() => setView('admin_integrations')}
+              className={`flex items-center w-full px-4 py-3 rounded-lg transition-colors ${view === 'admin_integrations' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+            >
+              <Settings className="w-5 h-5 mr-3" />
+              Integrations
+            </button>
+            <button
+              onClick={() => setView('admin_sync')}
+              className={`flex items-center w-full px-4 py-3 rounded-lg transition-colors ${view === 'admin_sync' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+            >
+              <RefreshCw className="w-5 h-5 mr-3" />
+              Sync Data
+            </button>
+            <button
+              onClick={() => setView('admin_agents')}
+              className={`flex items-center w-full px-4 py-3 rounded-lg transition-colors ${view === 'admin_agents' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+            >
+              <Bot className="w-5 h-5 mr-3" />
+              ElevenLabs Agents
+            </button>
+            <button
+              onClick={() => setView('helpdesk')}
+              className={`flex items-center w-full px-4 py-3 rounded-lg transition-colors ${view === 'helpdesk' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+            >
+              <MessageSquare className="w-5 h-5 mr-3" />
+              Helpdesk
+            </button>
+            <button
+              onClick={() => setView('notifications')}
+              className={`flex items-center w-full px-4 py-3 rounded-lg transition-colors ${view === 'notifications' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+            >
+              <Shield className="w-5 h-5 mr-3" />
+              Broadcasts
             </button>
           </nav>
-          <div className="p-4 border-t border-slate-800">
-            <button
-              onClick={() => setUserRole('admin')}
-              className="w-full text-center text-xs text-slate-500 hover:text-white"
-            >
-              Switch to Agency View (Demo)
-            </button>
-          </div>
         </aside>
 
+        <div className="fixed top-4 right-8 z-50">
+          <NotificationCenter />
+        </div>
+
         <main className="ml-0 md:ml-64 flex-1 p-8 overflow-y-auto h-screen">
-          <SuperAdminPage
-            agencies={MOCK_AGENCIES}
-            onImpersonate={(agency) => startImpersonation(agency, settings)}
-          />
+          {view === 'dashboard' && (
+            <SuperAdminPage
+              agencies={MOCK_AGENCIES}
+              onImpersonate={(agency) => startImpersonation(agency)}
+            />
+          )}
+          {view === 'onboarding' && <SuperAdminOnboardingPage />}
+          {view === 'agencies' && <AgenciesPage onImpersonate={(agency) => startImpersonation(agency)} />}
+          {view === 'admin_users' && <GlobalUsersPage />}
+          {view === 'admin_agents' && <ElevenLabsAgentsPage />}
+          {view === 'admin_calls' && <AdminCallsPage />}
+          {view === 'admin_reporting' && <AdminReportingPage />}
+          {view === 'korra_system' && <KorraSystemPage />}
+          {view === 'admin_integrations' && <AdminIntegrationsPage />}
+          {view === 'admin_sync' && <AdminSyncPage />}
+          {view === 'call-detail' && <CallDetailPage onBack={() => setView('calls')} />}
+          {view === 'agency_clients' && <AgencyClientsPage onImpersonate={startClientImpersonation} />}
+          {view === 'agency_users' && <AgencyUsersPage />}
+          {view === 'integrations' && <IntegrationsPage />}
+          {view === 'helpdesk' && <HelpdeskPage userRole="super_admin" />}
+          {view === 'notifications' && <NotificationManager userRole="super_admin" />}
         </main>
       </div>
     );
   }
 
-  // --- AGENCY ADMIN VIEW (Standard Dashboard) ---
-  return (
-    <div className="min-h-screen flex bg-slate-50 flex-col md:flex-row">
+  // --- AGENCY ADMIN VIEW (Default) ---
+  const isImpersonating = userRole === 'agency_admin';
 
-      {/* IMPERSONATION BANNER */}
-      {isImpersonating && impersonatedAgency && (
-        <div className="bg-red-600 text-white text-sm font-bold text-center py-2 fixed top-0 left-0 right-0 z-[60] shadow-lg flex items-center justify-center gap-4 animate-fade-in">
-          <span>Viewing as: {impersonatedAgency.name} ({impersonatedAgency.slug})</span>
+  return (
+    <div className="min-h-screen bg-slate-50 flex">
+      {/* Impersonation Banner */}
+      {isImpersonating && (
+        <div className="fixed top-0 left-0 right-0 bg-amber-500 text-white px-4 py-2 text-sm font-medium z-50 flex justify-between items-center shadow-md">
+          <div className="flex items-center">
+            <Shield className="w-4 h-4 mr-2" />
+            Viewing as Agency Admin (Impersonation Mode)
+          </div>
           <button
             onClick={stopImpersonation}
-            className="bg-white text-red-600 px-3 py-0.5 rounded text-xs hover:bg-red-50 transition-colors uppercase tracking-wide"
+            className="bg-white text-amber-600 px-3 py-1 rounded-md text-xs font-bold hover:bg-amber-50 transition-colors"
           >
-            Exit View
+            Exit Impersonation
           </button>
         </div>
       )}
 
-      {/* Sidebar - Adjusted top margin if banner exists */}
-      <aside className={`hidden md:flex w-64 bg-slate-900 text-slate-300 flex-col fixed inset-y-0 z-10 transition-all duration-300 ${isImpersonating ? 'top-9' : 'top-0'}`}>
+      {/* Sidebar */}
+      <aside className={`w-64 bg-white border-r border-slate-200 flex-col fixed inset-y-0 z-10 transition-all duration-300 overflow-y-auto ${isImpersonating ? 'top-10' : 'top-0'}`}>
         <div className="p-6">
-          <h1 className="text-2xl font-bold text-white tracking-tight flex items-center gap-2">
-            <div className={`w-8 h-8 rounded-full bg-gradient-to-tr ${userRole === 'super_admin' ? 'from-red-500 to-orange-500' : 'from-brand-500 to-indigo-500'}`}></div>
+          <h1 className="text-2xl font-bold text-brand-600 tracking-tight flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-brand-500 to-purple-600"></div>
             VIAI
           </h1>
-          <p className="text-xs text-slate-500 mt-2 font-mono">
-            {userRole === 'super_admin' ? 'SYSTEM OWNER' : `AGENCY: ${settings.name.toUpperCase()}`}
-          </p>
+          <p className="text-xs text-slate-500 mt-2 uppercase tracking-wider font-semibold">Agency Admin</p>
         </div>
 
-        <nav className="flex-1 px-4 space-y-2 mt-4 overflow-y-auto">
-
-          {/* Agency Admin Links */}
-          {userRole !== 'super_admin' && (
-            <>
-              <button
-                onClick={() => { setView('dashboard'); setSelectedCall(null); }}
-                className={`flex items-center w-full px-4 py-3 rounded-lg transition-all ${view === 'dashboard' ? 'bg-brand-600 text-white shadow-lg shadow-brand-900/50' : 'hover:bg-slate-800'}`}
-              >
-                <svg className="w-5 h-5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
-                Dashboard
-              </button>
-              <button
-                onClick={() => { setView('calls'); setSelectedCall(null); }}
-                className={`flex items-center w-full px-4 py-3 rounded-lg transition-all ${view === 'calls' ? 'bg-brand-600 text-white shadow-lg shadow-brand-900/50' : 'hover:bg-slate-800'}`}
-              >
-                <svg className="w-5 h-5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
-                Call Logs
-              </button>
-              <button
-                onClick={() => { setView('reporting'); setSelectedCall(null); }}
-                className={`flex items-center w-full px-4 py-3 rounded-lg transition-all ${view === 'reporting' ? 'bg-brand-600 text-white shadow-lg shadow-brand-900/50' : 'hover:bg-slate-800'}`}
-              >
-                <svg className="w-5 h-5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
-                Reporting Agent
-              </button>
-            </>
-          )}
-
-          <div className="pt-4 pb-2">
-            <p className="px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Administration</p>
-          </div>
-
+        <nav className="flex-1 px-4 mt-4 space-y-1">
           <button
-            onClick={() => { setView('users'); setSelectedCall(null); }}
-            className={`flex items-center w-full px-4 py-3 rounded-lg transition-all ${view === 'users' ? 'bg-brand-600 text-white shadow-lg shadow-brand-900/50' : 'hover:bg-slate-800'}`}
+            onClick={() => setView('dashboard')}
+            className={`flex items-center w-full px-4 py-3 rounded-lg transition-colors ${view === 'dashboard' ? 'bg-brand-50 text-brand-700 font-medium' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}
           >
-            <svg className="w-5 h-5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
-            Users & Roles
+            <LayoutDashboard className="w-5 h-5 mr-3" />
+            Dashboard
           </button>
-
-          {userRole !== 'super_admin' && (
-            <>
-              <button
-                onClick={() => { setView('integrations'); setSelectedCall(null); }}
-                className={`flex items-center w-full px-4 py-3 rounded-lg transition-all ${view === 'integrations' ? 'bg-brand-600 text-white shadow-lg shadow-brand-900/50' : 'hover:bg-slate-800'}`}
-              >
-                <svg className="w-5 h-5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z" /></svg>
-                Integrations
-              </button>
-              <button
-                onClick={() => { setView('sync'); setSelectedCall(null); }}
-                className={`flex items-center w-full px-4 py-3 rounded-lg transition-all ${view === 'sync' ? 'bg-brand-600 text-white shadow-lg shadow-brand-900/50' : 'hover:bg-slate-800'}`}
-              >
-                <svg className="w-5 h-5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                Sync Data
-              </button>
-            </>
-          )}
+          <button
+            onClick={() => setView('onboarding')}
+            className={`flex items-center w-full px-4 py-3 rounded-lg transition-colors ${view === 'onboarding' ? 'bg-brand-50 text-brand-700 font-medium' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}
+          >
+            <UserPlus className="w-5 h-5 mr-3" />
+            Onboarding
+          </button>
+          <button
+            onClick={() => setView('calls')}
+            className={`flex items-center w-full px-4 py-3 rounded-lg transition-colors ${view === 'calls' ? 'bg-brand-50 text-brand-700 font-medium' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}
+          >
+            <Phone className="w-5 h-5 mr-3" />
+            Call Logs
+          </button>
+          <button
+            onClick={() => setView('reporting')}
+            className={`flex items-center w-full px-4 py-3 rounded-lg transition-colors ${view === 'reporting' ? 'bg-brand-50 text-brand-700 font-medium' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}
+          >
+            <FileText className="w-5 h-5 mr-3" />
+            Reporting
+          </button>
+          <button
+            onClick={() => setView('agency_clients')}
+            className={`flex items-center w-full px-4 py-3 rounded-lg transition-colors ${view === 'agency_clients' ? 'bg-brand-50 text-brand-700 font-medium' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}
+          >
+            <Users className="w-5 h-5 mr-3" />
+            Clients
+          </button>
+          <button
+            onClick={() => setView('users')}
+            className={`flex items-center w-full px-4 py-3 rounded-lg transition-colors ${view === 'users' ? 'bg-brand-50 text-brand-700 font-medium' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}
+          >
+            <Shield className="w-5 h-5 mr-3" />
+            Team
+          </button>
+          <button
+            onClick={() => setView('integrations')}
+            className={`flex items-center w-full px-4 py-3 rounded-lg transition-colors ${view === 'integrations' ? 'bg-brand-50 text-brand-700 font-medium' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}
+          >
+            <Settings className="w-5 h-5 mr-3" />
+            Integrations
+          </button>
+          <button
+            onClick={() => setView('sync')}
+            className={`flex items-center w-full px-4 py-3 rounded-lg transition-colors ${view === 'sync' ? 'bg-brand-50 text-brand-700 font-medium' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}
+          >
+            <RefreshCw className="w-5 h-5 mr-3" />
+            Sync Data
+          </button>
         </nav>
 
-        <div className="p-4 border-t border-slate-800">
-          {/* Mock Role Switcher for Demo Purposes */}
-          {!isImpersonating && (
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-white">
-                  {userRole === 'super_admin' ? 'SA' : 'AD'}
-                </div>
-                <div>
-                  <p className="text-sm text-white">{userRole === 'super_admin' ? 'Super Admin' : 'Agency Admin'}</p>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => { setUserRole(r => r === 'super_admin' ? 'admin' : 'super_admin'); setSelectedCall(null); }}
-                      className="text-xs text-brand-400 hover:text-brand-300 underline"
-                    >
-                      Switch Role
-                    </button>
-                    <button
-                      onClick={() => { setUserRole('client'); setView('portal_dashboard'); setSelectedCall(null); }}
-                      className="text-xs text-brand-400 hover:text-brand-300 underline"
-                    >
-                      Client View
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
+        <div className="p-4 border-t border-slate-200">
+          <button className="flex items-center w-full px-4 py-3 text-slate-600 hover:bg-slate-50 rounded-lg transition-colors">
+            <LogOut className="w-5 h-5 mr-3" />
+            Sign Out
+          </button>
         </div>
       </aside>
 
       {/* Main Content */}
-      <main className={`ml-0 md:ml-64 flex-1 p-8 overflow-y-auto h-screen ${isImpersonating ? 'mt-9' : ''}`}>
+      <main className={`ml-64 flex-1 p-8 transition-all duration-300 ${isImpersonating ? 'mt-10' : 'mt-0'}`}>
 
-        {/* Header - Only show if not in specific views and NO selected call */}
-        {view === 'calls' && !selectedCall && (
-          <header className="flex justify-between items-center mb-8">
-            <div>
-              <h2 className="text-2xl font-bold text-slate-900">Call Logs</h2>
-              <p className="text-slate-500 mt-1">Real-time analysis from your agency clients.</p>
+        {/* Header */}
+        <header className="flex justify-between items-center mb-8">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-900">
+              {view === 'dashboard' && 'Dashboard'}
+              {view === 'onboarding' && 'Onboarding Center'}
+              {view === 'calls' && 'Call Logs'}
+              {view === 'reporting' && 'Reporting'}
+              {view === 'users' && 'Team Management'}
+              {view === 'agency_clients' && 'Client Management'}
+              {view === 'integrations' && 'Integrations'}
+              {view === 'sync' && 'Data Sync'}
+            </h2>
+            <p className="text-slate-500 mt-1">Welcome back, Admin</p>
+          </div>
+          <div className="flex items-center gap-4">
+            <button className="p-2 text-slate-400 hover:text-slate-600 transition-colors relative">
+              <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full"></span>
+              <Settings className="w-6 h-6" />
+            </button>
+            <div className="w-10 h-10 rounded-full bg-brand-100 flex items-center justify-center text-brand-700 font-bold border-2 border-white shadow-sm">
+              AD
             </div>
-            <ConnectOutlook
-              isConnected={settings.nangoConnected}
-              onConnect={() => setSettings(s => ({ ...s, nangoConnected: true }))}
-            />
-          </header>
-        )}
+          </div>
+        </header>
 
-        {view === 'dashboard' && !selectedCall && (
-          <>
-            <header className="flex justify-between items-center mb-8">
-              <div>
-                <h2 className="text-2xl font-bold text-slate-900">Voice Intelligence Overview</h2>
-                <p className="text-slate-500 mt-1">Real-time analysis from your agency clients.</p>
-              </div>
-              <ConnectOutlook
-                isConnected={settings.nangoConnected}
-                onConnect={() => setSettings(s => ({ ...s, nangoConnected: true }))}
-              />
-            </header>
+        {/* Views */}
+        {view === 'dashboard' && <AgencyDashboard />}
+        {view === 'onboarding' && <AgencyOnboardingPage />}
 
-            <div className="space-y-6">
-              {/* Top Metrics Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                <MinutesUsageCard />
+        {view === 'integrations' && <IntegrationsPage />}
+        {view === 'sync' && <SyncPage />}
+        {view === 'reporting' && <ReportingPage />}
+        {view === 'users' && <AgencyUsersPage />}
+        {view === 'agency_clients' && <AgencyClientsPage onImpersonate={startClientImpersonation} />}
 
-                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
-                  <div>
-                    <p className="text-slate-500 text-sm font-medium uppercase tracking-wide">Total Calls</p>
-                    <span className="bg-slate-100 text-slate-600 text-xs px-2 py-1 rounded">Last 30 Days</span>
-                    <p className="text-4xl font-bold text-slate-900 mt-4">{totalCalls}</p>
-                  </div>
-                  <div className="mt-2 text-green-600 text-sm font-medium flex items-center">
-                    <span className="bg-green-100 px-1.5 py-0.5 rounded mr-2">↑ 12%</span> vs last month
-                  </div>
-                </div>
-
-                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
-                  <div>
-                    <p className="text-slate-500 text-sm font-medium uppercase tracking-wide">Avg Sentiment</p>
-                    <span className="bg-slate-100 text-slate-600 text-xs px-2 py-1 rounded">Live</span>
-                    <div className="flex items-center gap-2 mt-4">
-                      <p className="text-4xl font-bold text-slate-900">{avgSentiment}</p>
-                      <div className="h-2 w-24 bg-slate-100 rounded-full">
-                        <div className="bg-brand-500 h-2 rounded-full" style={{ width: `${avgSentiment}%` }}></div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <ToolHealthCard />
-              </div>
-
-              {/* Charts Row 1 */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[400px]">
-                <AgentPerformanceGraph data={MOCK_AGENT_PERFORMANCE} />
-                <CallVolumeGraph data={MOCK_CALL_VOLUME} />
-              </div>
-
-              {/* Charts Row 2 */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Sentiment Chart */}
-                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                  <h3 className="text-lg font-bold text-slate-800 mb-4">Sentiment Trend (7 Days)</h3>
-                  <SentimentChart data={MOCK_TRENDS} />
-                </div>
-
-                {/* Word Cloud */}
-                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col">
-                  <h3 className="text-lg font-bold text-slate-800 mb-4">Trending Topics</h3>
-                  <div className="flex-1">
-                    <WordCloud words={globalKeywords} height={260} />
-                  </div>
+        {view === 'calls' && (
+          <div className="space-y-6 animate-fade-in">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+              <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+                <h3 className="font-bold text-slate-900">Recent Calls</h3>
+                <div className="flex gap-2">
+                  <button className="px-3 py-1.5 text-sm font-medium text-slate-600 bg-slate-50 rounded-lg hover:bg-slate-100">Filter</button>
+                  <button className="px-3 py-1.5 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700">Export</button>
                 </div>
               </div>
-
-              {/* RECENT ACTIVITY TABLE (New Addition for Clickability) */}
-              <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
-                  <h3 className="text-lg font-bold text-slate-800">Recent Call Activity</h3>
-                  <button
-                    onClick={() => setView('calls')}
-                    className="text-sm text-brand-600 font-medium hover:text-brand-800"
-                  >
-                    View All
-                  </button>
-                </div>
-                <table className="w-full text-left border-collapse">
-                  <tbody className="divide-y divide-slate-100 text-sm">
-                    {calls.slice(0, 3).map(call => (
-                      <tr key={call.id} className="hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => setSelectedCall(call)}>
-                        <td className="px-6 py-4 font-medium text-slate-900 w-1/4">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600">
-                              {call.clientName.charAt(0)}
-                            </div>
-                            {call.clientName}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-slate-600 w-1/4">{call.agentName}</td>
-                        <td className="px-6 py-4 w-1/4">
-                          {call.analysis ? (
-                            <div className="flex items-center gap-2">
-                              <div className={`w-2 h-2 rounded-full ${call.analysis.sentimentScore > 50 ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                              <span className="text-xs font-medium">{call.analysis.sentimentScore}/100</span>
-                            </div>
-                          ) : <span className="text-xs text-slate-400">Processing...</span>}
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          <span className="text-brand-600 font-medium text-xs">View Details →</span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* View Routing */}
-        {view === 'users' && !selectedCall && <UsersPage />}
-        {view === 'agencies' && !selectedCall && <AgenciesPage />}
-        {view === 'integrations' && !selectedCall && <IntegrationsPage />}
-        {view === 'sync' && !selectedCall && <SyncPage />}
-        {view === 'reporting' && !selectedCall && <ReportingPage />}
-
-        {view === 'calls' && !selectedCall && (
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-xs uppercase text-slate-500 font-semibold">
-                  <th className="px-6 py-4">Client</th>
-                  <th className="px-6 py-4">Agent</th>
-                  <th className="px-6 py-4">Date</th>
-                  <th className="px-6 py-4">Status</th>
-                  <th className="px-6 py-4">Sentiment</th>
-                  <th className="px-6 py-4">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-sm">
-                {calls.map(call => (
-                  <tr key={call.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-4 font-medium text-slate-900">{call.clientName}</td>
-                    <td className="px-6 py-4 text-slate-600">{call.agentName}</td>
-                    <td className="px-6 py-4 text-slate-500">{new Date(call.timestamp).toLocaleString()}</td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${call.status === 'processed' ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-800'
-                        }`}>
-                        {call.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      {call.analysis ? (
-                        <div className="flex items-center gap-2">
-                          <div className="w-16 bg-slate-200 rounded-full h-1.5">
-                            <div
-                              className={`h-1.5 rounded-full ${call.analysis.sentimentScore > 60 ? 'bg-green-500' : 'bg-red-500'}`}
-                              style={{ width: `${call.analysis.sentimentScore}%` }}
-                            ></div>
-                          </div>
-                          <span className="text-xs text-slate-600">{call.analysis.sentimentScore}</span>
-                        </div>
-                      ) : <span className="text-slate-400">-</span>}
-                    </td>
-                    <td className="px-6 py-4">
-                      <button
-                        onClick={() => setSelectedCall(call)}
-                        className="text-brand-600 font-medium hover:text-brand-800 hover:underline"
-                      >
-                        View Details
-                      </button>
-                    </td>
+              <table className="w-full text-left">
+                <thead className="bg-slate-50 text-slate-500 text-xs uppercase font-semibold">
+                  <tr>
+                    <th className="px-6 py-4">Client</th>
+                    <th className="px-6 py-4">Agent</th>
+                    <th className="px-6 py-4">Date</th>
+                    <th className="px-6 py-4">Status</th>
+                    <th className="px-6 py-4">Sentiment</th>
+                    <th className="px-6 py-4">Action</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-sm">
+                  {calls.map(call => (
+                    <tr key={call.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-6 py-4 font-medium text-slate-900">{call.clientName}</td>
+                      <td className="px-6 py-4 text-slate-600">{call.agentName}</td>
+                      <td className="px-6 py-4 text-slate-500">{new Date(call.timestamp).toLocaleString()}</td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${call.status === 'processed' ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-800'
+                          }`}>
+                          {call.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        {call.analysis ? (
+                          <div className="flex items-center gap-2">
+                            <div className="w-16 bg-slate-200 rounded-full h-1.5">
+                              <div
+                                className={`h-1.5 rounded-full ${call.analysis.sentimentScore > 60 ? 'bg-green-500' : 'bg-red-500'}`}
+                                style={{ width: `${call.analysis.sentimentScore}%` }}
+                              ></div>
+                            </div>
+                            <span className="text-xs text-slate-600">{call.analysis.sentimentScore}</span>
+                          </div>
+                        ) : <span className="text-slate-400">-</span>}
+                      </td>
+                      <td className="px-6 py-4">
+                        <button
+                          onClick={() => setSelectedCall(call)}
+                          className="text-brand-600 font-medium hover:text-brand-800 hover:underline"
+                        >
+                          View Details
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 

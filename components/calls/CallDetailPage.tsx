@@ -1,10 +1,9 @@
 
 import React from 'react';
 import { CallData } from '../../types';
-import { CallDetailLayout } from './CallDetailLayout';
 import { CallInfoCard, CallerInfoCard, ToolActivityCard } from './InfoCards';
 import InsightsPanel from './InsightsPanel';
-import { MediaSection } from './MediaSection';
+import { AudioPlayer, TranscriptViewer } from './MediaSection';
 import { MOCK_CALL_DETAIL } from '../../services/mockData';
 
 interface CallDetailPageProps {
@@ -20,40 +19,56 @@ const CallDetailPage: React.FC<CallDetailPageProps> = ({ call, onBack, onGenerat
   const safeCall = call || MOCK_CALL_DETAIL;
 
   return (
-    <CallDetailLayout
-      title={`Call: ${safeCall.clientName || 'Unknown'}`}
-      subtitle={`ID: ${safeCall.id} • ${safeCall.timestamp ? new Date(safeCall.timestamp).toLocaleString() : ''}`}
-      onBack={onBack}
-    >
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pb-8 h-full">
-        
-        {/* LEFT COLUMN: Info Cards + Insights */}
-        <div className="space-y-6 lg:col-span-1 flex flex-col h-full">
-           
-           {/* Zone A Cards */}
-           <div className="grid grid-cols-1 gap-4 shrink-0">
-              <CallInfoCard call={safeCall} />
-              <CallerInfoCard call={safeCall} />
-              <ToolActivityCard call={safeCall} />
-           </div>
-
-           {/* Zone B: Insights (Fills remaining height) */}
-           <div className="flex-1 min-h-[400px]">
-              <InsightsPanel 
-                call={safeCall} 
-                onGenerate={() => onGenerateAnalysis(safeCall.id)}
-                isGenerating={isAnalyzing}
-              />
-           </div>
+    <div className="animate-fade-in space-y-6">
+      {/* Header */}
+      <div className="flex items-center gap-4 mb-2">
+        <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+          <svg className="w-5 h-5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+        </button>
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Call Details</h1>
+          <p className="text-slate-500 text-sm">
+            {safeCall.timestamp ? new Date(safeCall.timestamp).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: 'numeric' }) : ''}
+          </p>
         </div>
-
-        {/* RIGHT COLUMN: Media & Transcript */}
-        <div className="lg:col-span-2 h-full min-h-[600px]">
-           <MediaSection call={safeCall} />
-        </div>
-
       </div>
-    </CallDetailLayout>
+
+      {/* Status Bar */}
+      <div className="bg-white border border-slate-200 rounded-xl p-4 flex items-center gap-6 shadow-sm">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-slate-500 font-medium">Status:</span>
+          <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 text-xs font-bold uppercase tracking-wide">
+            {safeCall.status}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-slate-500 font-medium">Duration:</span>
+          <span className="text-sm font-bold text-slate-900">{safeCall.duration}</span>
+        </div>
+      </div>
+
+      {/* Top Row: Info Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <CallInfoCard call={safeCall} />
+        <CallerInfoCard call={safeCall} />
+        <ToolActivityCard call={safeCall} />
+      </div>
+
+      {/* Middle Row: Insights */}
+      <div className="min-h-[300px]">
+        <InsightsPanel
+          call={safeCall}
+          onGenerate={() => onGenerateAnalysis(safeCall.id)}
+          isGenerating={isAnalyzing}
+        />
+      </div>
+
+      {/* Bottom Row: Media & Transcript */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[500px]">
+        <AudioPlayer call={safeCall} />
+        <TranscriptViewer call={safeCall} />
+      </div>
+    </div>
   );
 };
 
