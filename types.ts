@@ -38,6 +38,7 @@ export interface CallData {
 export interface AgencySettings {
   name: string;
   nangoConnected: boolean;
+  korraEnabled?: boolean;
 }
 
 // For chart data
